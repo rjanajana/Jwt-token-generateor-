@@ -1,3 +1,4 @@
+// Import Firebase modules
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js';
 import { getAuth, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js';
 import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc, collection, getDocs, addDoc } from 'https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js';
@@ -14,17 +15,26 @@ const firebaseConfig = {
     measurementId: "G-24KHRVXERP"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+// Initialize Firebase
+let app, auth, db;
+try {
+    app = initializeApp(firebaseConfig);
+    auth = getAuth(app);
+    db = getFirestore(app);
+    console.log('✅ Firebase initialized successfully');
+} catch (error) {
+    console.error('❌ Firebase initialization error:', error);
+}
 
 // Loader Functions
 function showLoader() {
-    document.getElementById('adminLoader').classList.remove('hidden');
+    const loader = document.getElementById('adminLoader');
+    if (loader) loader.classList.remove('hidden');
 }
 
 function hideLoader() {
-    document.getElementById('adminLoader').classList.add('hidden');
+    const loader = document.getElementById('adminLoader');
+    if (loader) loader.classList.add('hidden');
 }
 
 // Hash Password
@@ -36,33 +46,49 @@ async function hashPassword(password) {
 }
 
 // ===== ADMIN LOGIN =====
-document.getElementById('adminLoginForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const email = document.getElementById('adminEmail').value;
-    const password = document.getElementById('adminPassword').value;
-    const errorDiv = document.getElementById('adminLoginError');
+const loginForm = document.getElementById('adminLoginForm');
+if (loginForm) {
+    loginForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const emailInput = document.getElementById('adminEmail');
+        const passwordInput = document.getElementById('adminPassword');
+        const errorDiv = document.getElementById('adminLoginError');
+        
+        if (!emailInput || !passwordInput || !errorDiv) {
+            console.error('❌ Form elements not found');
+            return;
+        }
+        
+        const email = emailInput.value;
+        const password = passwordInput.value;
 
-    showLoader();
-    try {
-        await signInWithEmailAndPassword(auth, email, password);
-        document.getElementById('adminLoginView').classList.add('hidden');
-        document.getElementById('adminDashboard').classList.remove('hidden');
-        await loadAllData();
-    } catch (error) {
-        errorDiv.textContent = '❌ Invalid credentials';
-        errorDiv.classList.remove('hidden');
-        setTimeout(() => errorDiv.classList.add('hidden'), 3000);
-        console.error('Login error:', error);
-    } finally {
-        hideLoader();
-    }
-});
+        showLoader();
+        try {
+            await signInWithEmailAndPassword(auth, email, password);
+            const loginView = document.getElementById('adminLoginView');
+            const dashboard = document.getElementById('adminDashboard');
+            if (loginView) loginView.classList.add('hidden');
+            if (dashboard) dashboard.classList.remove('hidden');
+            await loadAllData();
+        } catch (error) {
+            errorDiv.textContent = '❌ Invalid credentials';
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 3000);
+            console.error('Login error:', error);
+        } finally {
+            hideLoader();
+        }
+    });
+}
 
 // Admin Logout
-document.getElementById('adminLogout').addEventListener('click', async () => {
-    await signOut(auth);
-    location.reload();
-});
+const logoutBtn = document.getElementById('adminLogout');
+if (logoutBtn) {
+    logoutBtn.addEventListener('click', async () => {
+        await signOut(auth);
+        location.reload();
+    });
+}
 
 // Load All Data
 async function loadAllData() {
@@ -77,6 +103,8 @@ async function loadAllData() {
 // ===== SERVER MANAGEMENT =====
 async function loadServers() {
     const serverList = document.getElementById('serverList');
+    if (!serverList) return;
+    
     serverList.innerHTML = '';
     
     try {
@@ -104,12 +132,12 @@ async function loadServers() {
                     <span style="color: var(--text-gray); font-size: 12px;">${server.baseUrl}</span>
                 </div>
                 <div class="admin-item-actions">
-                    <button class="action-icon-btn pin" onclick="editServer('${server.id}', '${server.name}', '${server.baseUrl}', ${server.order || 0})">
+                    <button class="action-icon-btn pin" data-action="editServer" data-id="${server.id}" data-name="${server.name}" data-url="${server.baseUrl}" data-order="${server.order || 0}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-width="2"/>
                         </svg>
                     </button>
-                    <button class="action-icon-btn close" onclick="deleteServer('${server.id}')">
+                    <button class="action-icon-btn close" data-action="deleteServer" data-id="${server.id}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M18 6L6 18M6 6l12 12" stroke-width="2"/>
                         </svg>
@@ -118,44 +146,61 @@ async function loadServers() {
             `;
             serverList.appendChild(item);
         });
+        
+        // Add event listeners
+        serverList.querySelectorAll('[data-action="editServer"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                editServer(btn.dataset.id, btn.dataset.name, btn.dataset.url, btn.dataset.order);
+            });
+        });
+        
+        serverList.querySelectorAll('[data-action="deleteServer"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                deleteServer(btn.dataset.id);
+            });
+        });
+        
     } catch (error) {
         console.error('Server load error:', error);
         serverList.innerHTML = '<p class="error-text">Error loading servers</p>';
     }
 }
 
-document.getElementById('serverForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const editId = document.getElementById('editServerId').value;
-    const name = document.getElementById('serverName').value;
-    const baseUrl = document.getElementById('serverUrl').value;
-    const order = parseInt(document.getElementById('serverOrder').value) || 0;
+const serverForm = document.getElementById('serverForm');
+if (serverForm) {
+    serverForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('editServerId').value;
+        const name = document.getElementById('serverName').value;
+        const baseUrl = document.getElementById('serverUrl').value;
+        const order = parseInt(document.getElementById('serverOrder').value) || 0;
 
-    showLoader();
-    try {
-        const serverData = { name, baseUrl, order };
-        
-        if (editId) {
-            await updateDoc(doc(db, 'servers', editId), serverData);
-        } else {
-            await addDoc(collection(db, 'servers'), serverData);
+        showLoader();
+        try {
+            const serverData = { name, baseUrl, order };
+            
+            if (editId) {
+                await updateDoc(doc(db, 'servers', editId), serverData);
+            } else {
+                await addDoc(collection(db, 'servers'), serverData);
+            }
+            
+            serverForm.reset();
+            document.getElementById('editServerId').value = '';
+            document.getElementById('serverBtnText').textContent = 'ADD SERVER';
+            document.getElementById('cancelServerEdit').classList.add('hidden');
+            await loadServers();
+            alert('✅ Server saved successfully!');
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+            console.error('Server save error:', error);
+        } finally {
+            hideLoader();
         }
-        
-        document.getElementById('serverForm').reset();
-        document.getElementById('editServerId').value = '';
-        document.getElementById('serverBtnText').textContent = 'ADD SERVER';
-        document.getElementById('cancelServerEdit').classList.add('hidden');
-        await loadServers();
-        alert('✅ Server saved successfully!');
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-        console.error('Server save error:', error);
-    } finally {
-        hideLoader();
-    }
-});
+    });
+}
 
-window.editServer = (id, name, url, order) => {
+function editServer(id, name, url, order) {
     document.getElementById('editServerId').value = id;
     document.getElementById('serverName').value = name;
     document.getElementById('serverUrl').value = url;
@@ -163,9 +208,9 @@ window.editServer = (id, name, url, order) => {
     document.getElementById('serverBtnText').textContent = 'UPDATE SERVER';
     document.getElementById('cancelServerEdit').classList.remove('hidden');
     window.scrollTo(0, 0);
-};
+}
 
-window.deleteServer = async (id) => {
+async function deleteServer(id) {
     if (confirm('❌ Delete this server?')) {
         showLoader();
         try {
@@ -178,18 +223,23 @@ window.deleteServer = async (id) => {
             hideLoader();
         }
     }
-};
+}
 
-document.getElementById('cancelServerEdit').addEventListener('click', () => {
-    document.getElementById('serverForm').reset();
-    document.getElementById('editServerId').value = '';
-    document.getElementById('serverBtnText').textContent = 'ADD SERVER';
-    document.getElementById('cancelServerEdit').classList.add('hidden');
-});
+const cancelServerEdit = document.getElementById('cancelServerEdit');
+if (cancelServerEdit) {
+    cancelServerEdit.addEventListener('click', () => {
+        serverForm.reset();
+        document.getElementById('editServerId').value = '';
+        document.getElementById('serverBtnText').textContent = 'ADD SERVER';
+        cancelServerEdit.classList.add('hidden');
+    });
+}
 
 // ===== CATEGORY MANAGEMENT =====
 async function loadCategories() {
     const categoryList = document.getElementById('categoryList');
+    if (!categoryList) return;
+    
     categoryList.innerHTML = '';
     
     try {
@@ -217,12 +267,12 @@ async function loadCategories() {
                     <span style="color: var(--text-gray); font-size: 12px;">Order: ${cat.order || 0}</span>
                 </div>
                 <div class="admin-item-actions">
-                    <button class="action-icon-btn pin" onclick='editCategory("${cat.id}", "${cat.name}", "${cat.icon || ''}", ${cat.order || 0})'>
+                    <button class="action-icon-btn pin" data-action="editCategory" data-id="${cat.id}" data-name="${cat.name}" data-icon="${cat.icon || ''}" data-order="${cat.order || 0}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-width="2"/>
                         </svg>
                     </button>
-                    <button class="action-icon-btn close" onclick="deleteCategory('${cat.id}')">
+                    <button class="action-icon-btn close" data-action="deleteCategory" data-id="${cat.id}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M18 6L6 18M6 6l12 12" stroke-width="2"/>
                         </svg>
@@ -231,6 +281,20 @@ async function loadCategories() {
             `;
             categoryList.appendChild(item);
         });
+        
+        // Add event listeners
+        categoryList.querySelectorAll('[data-action="editCategory"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                editCategory(btn.dataset.id, btn.dataset.name, btn.dataset.icon, btn.dataset.order);
+            });
+        });
+        
+        categoryList.querySelectorAll('[data-action="deleteCategory"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                deleteCategory(btn.dataset.id);
+            });
+        });
+        
     } catch (error) {
         console.error('Category load error:', error);
     }
@@ -241,6 +305,7 @@ async function loadCategoryDropdown() {
         const categoriesCol = collection(db, 'categories');
         const snapshot = await getDocs(categoriesCol);
         const select = document.getElementById('emoteCategory');
+        if (!select) return;
         
         select.innerHTML = '<option value="">Select Category</option>';
         
@@ -262,38 +327,41 @@ async function loadCategoryDropdown() {
     }
 }
 
-document.getElementById('categoryForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const editId = document.getElementById('editCategoryId').value;
-    const name = document.getElementById('categoryName').value;
-    const icon = document.getElementById('categoryIcon').value;
-    const order = parseInt(document.getElementById('categoryOrder').value) || 0;
+const categoryForm = document.getElementById('categoryForm');
+if (categoryForm) {
+    categoryForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('editCategoryId').value;
+        const name = document.getElementById('categoryName').value;
+        const icon = document.getElementById('categoryIcon').value;
+        const order = parseInt(document.getElementById('categoryOrder').value) || 0;
 
-    showLoader();
-    try {
-        const categoryData = { name, icon, order };
-        
-        if (editId) {
-            await updateDoc(doc(db, 'categories', editId), categoryData);
-        } else {
-            await addDoc(collection(db, 'categories'), categoryData);
+        showLoader();
+        try {
+            const categoryData = { name, icon, order };
+            
+            if (editId) {
+                await updateDoc(doc(db, 'categories', editId), categoryData);
+            } else {
+                await addDoc(collection(db, 'categories'), categoryData);
+            }
+            
+            categoryForm.reset();
+            document.getElementById('editCategoryId').value = '';
+            document.getElementById('categoryBtnText').textContent = 'ADD CATEGORY';
+            document.getElementById('cancelCategoryEdit').classList.add('hidden');
+            await loadCategories();
+            await loadCategoryDropdown();
+            alert('✅ Category saved!');
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        } finally {
+            hideLoader();
         }
-        
-        document.getElementById('categoryForm').reset();
-        document.getElementById('editCategoryId').value = '';
-        document.getElementById('categoryBtnText').textContent = 'ADD CATEGORY';
-        document.getElementById('cancelCategoryEdit').classList.add('hidden');
-        await loadCategories();
-        await loadCategoryDropdown();
-        alert('✅ Category saved!');
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-    } finally {
-        hideLoader();
-    }
-});
+    });
+}
 
-window.editCategory = (id, name, icon, order) => {
+function editCategory(id, name, icon, order) {
     document.getElementById('editCategoryId').value = id;
     document.getElementById('categoryName').value = name;
     document.getElementById('categoryIcon').value = icon;
@@ -301,9 +369,9 @@ window.editCategory = (id, name, icon, order) => {
     document.getElementById('categoryBtnText').textContent = 'UPDATE CATEGORY';
     document.getElementById('cancelCategoryEdit').classList.remove('hidden');
     window.scrollTo(0, 0);
-};
+}
 
-window.deleteCategory = async (id) => {
+async function deleteCategory(id) {
     if (confirm('❌ Delete this category?')) {
         showLoader();
         try {
@@ -317,18 +385,23 @@ window.deleteCategory = async (id) => {
             hideLoader();
         }
     }
-};
+}
 
-document.getElementById('cancelCategoryEdit').addEventListener('click', () => {
-    document.getElementById('categoryForm').reset();
-    document.getElementById('editCategoryId').value = '';
-    document.getElementById('categoryBtnText').textContent = 'ADD CATEGORY';
-    document.getElementById('cancelCategoryEdit').classList.add('hidden');
-});
+const cancelCategoryEdit = document.getElementById('cancelCategoryEdit');
+if (cancelCategoryEdit) {
+    cancelCategoryEdit.addEventListener('click', () => {
+        categoryForm.reset();
+        document.getElementById('editCategoryId').value = '';
+        document.getElementById('categoryBtnText').textContent = 'ADD CATEGORY';
+        cancelCategoryEdit.classList.add('hidden');
+    });
+}
 
 // ===== EMOTE MANAGEMENT =====
 async function loadEmotes() {
     const emoteList = document.getElementById('emoteList');
+    if (!emoteList) return;
+    
     emoteList.innerHTML = '';
     
     try {
@@ -353,12 +426,12 @@ async function loadEmotes() {
                     </div>
                 </div>
                 <div class="admin-item-actions">
-                    <button class="action-icon-btn pin" onclick='editEmote("${doc.id}", "${emote.imageUrl}", "${emote.category}")'>
+                    <button class="action-icon-btn pin" data-action="editEmote" data-id="${doc.id}" data-url="${emote.imageUrl}" data-category="${emote.category}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" stroke-width="2"/>
                         </svg>
                     </button>
-                    <button class="action-icon-btn close" onclick="deleteEmote('${doc.id}')">
+                    <button class="action-icon-btn close" data-action="deleteEmote" data-id="${doc.id}">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
                             <path d="M18 6L6 18M6 6l12 12" stroke-width="2"/>
                         </svg>
@@ -367,56 +440,77 @@ async function loadEmotes() {
             `;
             emoteList.appendChild(item);
         });
+        
+        // Add event listeners
+        emoteList.querySelectorAll('[data-action="editEmote"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                editEmote(btn.dataset.id, btn.dataset.url, btn.dataset.category);
+            });
+        });
+        
+        emoteList.querySelectorAll('[data-action="deleteEmote"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                deleteEmote(btn.dataset.id);
+            });
+        });
+        
     } catch (error) {
         console.error('Emote load error:', error);
     }
 }
 
-document.getElementById('emoteImageUrl').addEventListener('input', (e) => {
-    const url = e.target.value;
-    const preview = document.getElementById('emotePreview');
-    if (url) {
-        preview.innerHTML = `<img src="${url}" style="max-width: 150px; max-height: 150px; border-radius: 10px;">`;
-    } else {
-        preview.innerHTML = '';
-    }
-});
-
-document.getElementById('emoteForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const editId = document.getElementById('editEmoteId').value;
-    const imageUrl = document.getElementById('emoteImageUrl').value;
-    const category = document.getElementById('emoteCategory').value;
-    
-    // Extract emote ID from URL
-    const filename = imageUrl.split('/').pop();
-    const emoteId = filename.split('.')[0];
-
-    showLoader();
-    try {
-        const emoteData = { imageUrl, category, emoteId };
-        
-        if (editId) {
-            await updateDoc(doc(db, 'emotes', editId), emoteData);
-        } else {
-            await addDoc(collection(db, 'emotes'), emoteData);
+const emoteImageInput = document.getElementById('emoteImageUrl');
+if (emoteImageInput) {
+    emoteImageInput.addEventListener('input', (e) => {
+        const url = e.target.value;
+        const preview = document.getElementById('emotePreview');
+        if (preview) {
+            if (url) {
+                preview.innerHTML = `<img src="${url}" style="max-width: 150px; max-height: 150px; border-radius: 10px;">`;
+            } else {
+                preview.innerHTML = '';
+            }
         }
-        
-        document.getElementById('emoteForm').reset();
-        document.getElementById('editEmoteId').value = '';
-        document.getElementById('emoteBtnText').textContent = 'ADD EMOTE';
-        document.getElementById('cancelEmoteEdit').classList.add('hidden');
-        document.getElementById('emotePreview').innerHTML = '';
-        await loadEmotes();
-        alert('✅ Emote saved!');
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-    } finally {
-        hideLoader();
-    }
-});
+    });
+}
 
-window.editEmote = (id, url, category) => {
+const emoteForm = document.getElementById('emoteForm');
+if (emoteForm) {
+    emoteForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const editId = document.getElementById('editEmoteId').value;
+        const imageUrl = document.getElementById('emoteImageUrl').value;
+        const category = document.getElementById('emoteCategory').value;
+        
+        const filename = imageUrl.split('/').pop();
+        const emoteId = filename.split('.')[0];
+
+        showLoader();
+        try {
+            const emoteData = { imageUrl, category, emoteId };
+            
+            if (editId) {
+                await updateDoc(doc(db, 'emotes', editId), emoteData);
+            } else {
+                await addDoc(collection(db, 'emotes'), emoteData);
+            }
+            
+            emoteForm.reset();
+            document.getElementById('editEmoteId').value = '';
+            document.getElementById('emoteBtnText').textContent = 'ADD EMOTE';
+            document.getElementById('cancelEmoteEdit').classList.add('hidden');
+            document.getElementById('emotePreview').innerHTML = '';
+            await loadEmotes();
+            alert('✅ Emote saved!');
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        } finally {
+            hideLoader();
+        }
+    });
+}
+
+function editEmote(id, url, category) {
     document.getElementById('editEmoteId').value = id;
     document.getElementById('emoteImageUrl').value = url;
     document.getElementById('emoteCategory').value = category;
@@ -424,9 +518,9 @@ window.editEmote = (id, url, category) => {
     document.getElementById('cancelEmoteEdit').classList.remove('hidden');
     document.getElementById('emotePreview').innerHTML = `<img src="${url}" style="max-width: 150px; max-height: 150px; border-radius: 10px;">`;
     window.scrollTo(0, document.getElementById('emoteForm').offsetTop - 100);
-};
+}
 
-window.deleteEmote = async (id) => {
+async function deleteEmote(id) {
     if (confirm('❌ Delete this emote?')) {
         showLoader();
         try {
@@ -439,15 +533,18 @@ window.deleteEmote = async (id) => {
             hideLoader();
         }
     }
-};
+}
 
-document.getElementById('cancelEmoteEdit').addEventListener('click', () => {
-    document.getElementById('emoteForm').reset();
-    document.getElementById('editEmoteId').value = '';
-    document.getElementById('emoteBtnText').textContent = 'ADD EMOTE';
-    document.getElementById('cancelEmoteEdit').classList.add('hidden');
-    document.getElementById('emotePreview').innerHTML = '';
-});
+const cancelEmoteEdit = document.getElementById('cancelEmoteEdit');
+if (cancelEmoteEdit) {
+    cancelEmoteEdit.addEventListener('click', () => {
+        emoteForm.reset();
+        document.getElementById('editEmoteId').value = '';
+        document.getElementById('emoteBtnText').textContent = 'ADD EMOTE';
+        cancelEmoteEdit.classList.add('hidden');
+        document.getElementById('emotePreview').innerHTML = '';
+    });
+}
 
 // ===== FOOTER LINKS =====
 async function loadLinks() {
@@ -466,23 +563,26 @@ async function loadLinks() {
     }
 }
 
-document.getElementById('linksForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    showLoader();
-    try {
-        await setDoc(doc(db, 'settings', 'footerLinks'), {
-            telegram: document.getElementById('telegramUrl').value,
-            github: document.getElementById('githubUrl').value,
-            discord: document.getElementById('discordUrl').value,
-            youtube: document.getElementById('youtubeUrl').value
-        });
-        alert('✅ Links updated!');
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-    } finally {
-        hideLoader();
-    }
-});
+const linksForm = document.getElementById('linksForm');
+if (linksForm) {
+    linksForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoader();
+        try {
+            await setDoc(doc(db, 'settings', 'footerLinks'), {
+                telegram: document.getElementById('telegramUrl').value,
+                github: document.getElementById('githubUrl').value,
+                discord: document.getElementById('discordUrl').value,
+                youtube: document.getElementById('youtubeUrl').value
+            });
+            alert('✅ Links updated!');
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        } finally {
+            hideLoader();
+        }
+    });
+}
 
 // ===== MAINTENANCE MODE =====
 async function loadMaintenance() {
@@ -499,38 +599,44 @@ async function loadMaintenance() {
     }
 }
 
-document.getElementById('maintenanceForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    showLoader();
-    try {
-        await setDoc(doc(db, 'settings', 'maintenance'), {
-            enabled: document.getElementById('maintenanceToggle').checked,
-            message: document.getElementById('maintenanceMessage').value
-        });
-        alert('✅ Maintenance settings saved!');
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-    } finally {
-        hideLoader();
-    }
-});
+const maintenanceForm = document.getElementById('maintenanceForm');
+if (maintenanceForm) {
+    maintenanceForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showLoader();
+        try {
+            await setDoc(doc(db, 'settings', 'maintenance'), {
+                enabled: document.getElementById('maintenanceToggle').checked,
+                message: document.getElementById('maintenanceMessage').value
+            });
+            alert('✅ Maintenance settings saved!');
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        } finally {
+            hideLoader();
+        }
+    });
+}
 
 // ===== PASSWORD MANAGER =====
-document.getElementById('passwordForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const newPassword = document.getElementById('newPassword').value;
-    
-    showLoader();
-    try {
-        const hash = await hashPassword(newPassword);
-        await setDoc(doc(db, 'settings', 'loginPassword'), { hash });
-        alert('✅ Password updated!\nNew password: ' + newPassword);
-        document.getElementById('newPassword').value = '';
-    } catch (error) {
-        alert('❌ Error: ' + error.message);
-    } finally {
-        hideLoader();
-    }
-});
+const passwordForm = document.getElementById('passwordForm');
+if (passwordForm) {
+    passwordForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const newPassword = document.getElementById('newPassword').value;
+        
+        showLoader();
+        try {
+            const hash = await hashPassword(newPassword);
+            await setDoc(doc(db, 'settings', 'loginPassword'), { hash });
+            alert('✅ Password updated!\nNew password: ' + newPassword);
+            document.getElementById('newPassword').value = '';
+        } catch (error) {
+            alert('❌ Error: ' + error.message);
+        } finally {
+            hideLoader();
+        }
+    });
+}
 
-console.log('🔥 PHANTOMS Admin Panel Ready!');
+console.log('🔥 NOVRA X Admin Panel Ready!');
